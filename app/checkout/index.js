@@ -1,44 +1,107 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, Alert } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { db, auth } from '../../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 
-export default function CheckoutIndex() {
-  const router = useRouter();
+export default function CheckoutInfo() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('COD'); // Default to COD
+  const router = useRouter();
 
-  const goToPayment = () => {
+  useEffect(() => {
+    const loadSavedDetails = async () => {
+      const user = auth.currentUser;
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", user.uid));
+          if (userDoc.exists() && userDoc.data().savedAddress) {
+            const saved = userDoc.data().savedAddress;
+            setName(saved.name || '');
+            setPhone(saved.phone || '');
+            setAddress(saved.address || '');
+          }
+        } catch (error) {
+          console.log("Error fetching saved details:", error);
+        }
+      }
+    };
+    loadSavedDetails();
+  }, []);
+
+  const handleNext = () => {
     if (!name || !phone || !address) {
-      Alert.alert("Required", "Please fill in all details");
+      Alert.alert("Missing Info", "Please fill in all fields to continue.");
       return;
     }
-    
-    // IMPORTANT: Path must match your folder structure
     router.push({
-      pathname: "/checkout/payment", 
-      params: { name, phone, address }
+      pathname: '/checkout/payment',
+      params: { name, phone, address, paymentMethod } // Pass payment method too
     });
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Shipping Info</Text>
-      <TextInput placeholder="Full Name" style={styles.input} value={name} onChangeText={setName} />
-      <TextInput placeholder="Phone" style={styles.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-      <TextInput placeholder="Address" style={[styles.input, {height: 80}]} multiline value={address} onChangeText={setAddress} />
-      
-      <TouchableOpacity style={styles.button} onPress={goToPayment}>
-        <Text style={styles.buttonText}>Continue to Payment</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <Text style={styles.title}>Checkout</Text>
+      <Text style={styles.subtitle}>Shipping & Payment Method</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.label}>Full Name</Text>
+        <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName} />
+
+        <Text style={styles.label}>Phone Number</Text>
+        <TextInput style={styles.input} placeholder="03xx xxxxxxx" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+
+        <Text style={styles.label}>Delivery Address</Text>
+        <TextInput style={[styles.input, styles.textArea]} placeholder="Complete Address" multiline value={address} onChangeText={setAddress} />
+      </View>
+
+      {/* --- PAYMENT METHOD SELECTION --- */}
+      <Text style={styles.label}>Payment Method</Text>
+      <TouchableOpacity 
+        style={[styles.paymentOption, paymentMethod === 'COD' && styles.activeOption]} 
+        onPress={() => setPaymentMethod('COD')}
+      >
+        <Ionicons name="cash-outline" size={24} color={paymentMethod === 'COD' ? '#3498db' : '#64748b'} />
+        <Text style={[styles.paymentText, paymentMethod === 'COD' && styles.activePaymentText]}>Cash on Delivery (COD)</Text>
+        {paymentMethod === 'COD' && <Ionicons name="checkmark-circle" size={20} color="#3498db" />}
       </TouchableOpacity>
-    </View>
+
+      <TouchableOpacity 
+        style={[styles.paymentOption, styles.disabledOption]} 
+        disabled={true}
+      >
+        <Ionicons name="card-outline" size={24} color="#cbd5e1" />
+        <Text style={styles.disabledText}>Credit / Debit Card (Coming Soon)</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.btn} onPress={handleNext}>
+        <Text style={styles.btnText}>Review Order</Text>
+      </TouchableOpacity>
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, paddingTop: 60, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 20 },
-  input: { backgroundColor: '#f0f0f0', padding: 15, borderRadius: 10, marginBottom: 15 },
-  button: { backgroundColor: '#3498db', padding: 18, borderRadius: 10, alignItems: 'center' },
-  buttonText: { color: '#fff', fontWeight: 'bold' }
+  container: { flex: 1, backgroundColor: '#fff', padding: 20 },
+  title: { fontSize: 24, fontWeight: 'bold', color: '#1e293b', marginTop: 20 },
+  subtitle: { color: '#64748b', marginBottom: 25 },
+  label: { fontSize: 14, fontWeight: '700', color: '#1e293b', marginBottom: 10, marginTop: 10 },
+  input: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 15, fontSize: 16, marginBottom: 15 },
+  textArea: { height: 80, textAlignVertical: 'top' },
+  paymentOption: { 
+    flexDirection: 'row', alignItems: 'center', padding: 15, borderRadius: 12, 
+    borderWidth: 1, borderColor: '#e2e8f0', marginBottom: 10, gap: 12 
+  },
+  activeOption: { borderColor: '#3498db', backgroundColor: '#f0f9ff' },
+  paymentText: { flex: 1, fontSize: 15, color: '#475569', fontWeight: '500' },
+  activePaymentText: { color: '#3498db', fontWeight: 'bold' },
+  disabledOption: { backgroundColor: '#f1f5f9', borderColor: '#f1f5f9' },
+  disabledText: { flex: 1, fontSize: 15, color: '#cbd5e1' },
+  btn: { backgroundColor: '#3498db', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 20 },
+  btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

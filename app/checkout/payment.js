@@ -1,20 +1,18 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator, SafeAreaView } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db, auth } from '../../config/firebase'; 
-import { collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function PaymentScreen() {
-  const { name, phone, address } = useLocalSearchParams();
+  const { name, phone, address, paymentMethod } = useLocalSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
   const completeOrder = async () => {
     const user = auth.currentUser;
-    if (!user) {
-      Alert.alert("Error", "You must be logged in to order.");
-      return;
-    }
+    if (!user) return Alert.alert("Error", "Login required");
 
     setLoading(true);
     try {
@@ -29,23 +27,27 @@ export default function PaymentScreen() {
 
       const total = items.reduce((acc, item) => acc + (Number(item.price) || 0), 0);
 
-      // Save order with userId link
+      // 1. PLACE THE ORDER (Including Payment Method)
       await addDoc(collection(db, "orders"), {
-        userId: user.uid, // This allows the Account screen to filter orders
+        userId: user.uid,
         customer: { name, phone, address },
+        paymentMethod: paymentMethod,
         items: items,
         totalAmount: total,
         status: "Pending",
         createdAt: serverTimestamp()
       });
 
-      // Clear Cart
-      for (const item of cartSnap.docs) {
-        await deleteDoc(doc(db, "cart", item.id));
-      }
+      // 2. SAVE USER SHIPPING ADDRESS
+      await setDoc(doc(db, "users", user.uid), {
+        savedAddress: { name, phone, address, updatedAt: serverTimestamp() }
+      }, { merge: true });
 
-      Alert.alert("Success", "Your order has been placed!", [
-        { text: "View Orders", onPress: () => router.replace('/(tabs)/account') }
+      // 3. CLEAR CART
+      for (const item of cartSnap.docs) await deleteDoc(doc(db, "cart", item.id));
+
+      Alert.alert("Success", "Your order is on the way!", [
+        { text: "View My Orders", onPress: () => router.replace('/account') }
       ]);
     } catch (error) {
       Alert.alert("Error", error.message);
@@ -55,25 +57,42 @@ export default function PaymentScreen() {
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Payment Method</Text>
-      <Text style={styles.sub}>Order for: {name}</Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.card}>
+        <Ionicons name="document-text-outline" size={50} color="#3498db" style={{alignSelf: 'center'}} />
+        <Text style={styles.title}>Order Summary</Text>
+        
+        <View style={styles.row}>
+          <Text style={styles.label}>Ship to:</Text>
+          <Text style={styles.value}>{name}</Text>
+        </View>
+
+        <View style={styles.row}>
+          <Text style={styles.label}>Payment:</Text>
+          <Text style={styles.value}>{paymentMethod}</Text>
+        </View>
+
+        <View style={styles.divider} />
+        
+        <Text style={styles.infoText}>By clicking below, you agree to our terms of service and delivery policy.</Text>
+      </View>
       
-      <TouchableOpacity 
-        style={styles.payBtn} 
-        onPress={completeOrder}
-        disabled={loading}
-      >
-        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>Cash on Delivery</Text>}
+      <TouchableOpacity style={styles.payBtn} onPress={completeOrder} disabled={loading}>
+        {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.payBtnText}>Place Order Now</Text>}
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, justifyContent: 'center', backgroundColor: '#fff' },
-  title: { fontSize: 26, fontWeight: 'bold', textAlign: 'center' },
-  sub: { textAlign: 'center', color: '#64748b', marginBottom: 40, marginTop: 5 },
-  payBtn: { backgroundColor: '#3498db', padding: 20, borderRadius: 15, alignItems: 'center', elevation: 4 },
-  payBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 17 }
+  container: { flex: 1, padding: 20, backgroundColor: '#f8fafc', justifyContent: 'center' },
+  card: { backgroundColor: '#fff', padding: 25, borderRadius: 20, elevation: 3, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
+  title: { fontSize: 22, fontWeight: 'bold', textAlign: 'center', marginVertical: 15, color: '#1e293b' },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  label: { color: '#64748b', fontSize: 15 },
+  value: { color: '#1e293b', fontWeight: 'bold', fontSize: 15, flex: 1, textAlign: 'right', marginLeft: 10 },
+  divider: { height: 1, backgroundColor: '#e2e8f0', marginVertical: 15 },
+  infoText: { fontSize: 12, color: '#94a3b8', textAlign: 'center', lineHeight: 18 },
+  payBtn: { backgroundColor: '#3498db', padding: 20, borderRadius: 15, alignItems: 'center', marginTop: 30 },
+  payBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 18 }
 });
