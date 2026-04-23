@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { auth, db } from '../../config/firebase';
 import { signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -14,6 +14,7 @@ export default function AccountScreen() {
   const router = useRouter();
   
   const [orders, setOrders] = useState([]);
+  const [userData, setUserData] = useState(null); // New state for Firestore user data
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
   const [adminPass, setAdminPass] = useState('');
@@ -23,22 +24,37 @@ export default function AccountScreen() {
       setLoading(false);
       return;
     }
+
+    // 1. Fetch User Name from Firestore
+    const fetchUserData = async () => {
+      try {
+        const userDoc = await getDoc(doc(db, "users", user.uid));
+        if (userDoc.exists()) {
+          setUserData(userDoc.data());
+        }
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+      }
+    };
+
+    // 2. Fetch Orders Real-time
     const q = query(collection(db, "orders"), where("userId", "==", user.uid));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeOrders = onSnapshot(q, (snapshot) => {
       setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       setLoading(false);
     }, (err) => {
       console.error(err);
       setLoading(false);
     });
-    return unsubscribe;
+
+    fetchUserData();
+    return () => unsubscribeOrders();
   }, [user]);
 
   const handleAdminAuth = () => {
     if (adminPass === "admin123") {
       setModalVisible(false);
       setAdminPass('');
-      // Navigating to app/admin/dashboard.js
       router.push('/admin/dashboard'); 
     } else {
       Alert.alert("Access Denied", "Incorrect Password");
@@ -81,9 +97,13 @@ export default function AccountScreen() {
       >
         <View style={styles.header}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{user?.email?.charAt(0).toUpperCase() || 'A'}</Text>
+            {/* Display first letter of name or email */}
+            <Text style={styles.avatarText}>
+              {(userData?.name || user?.email)?.charAt(0).toUpperCase()}
+            </Text>
           </View>
-          <Text style={styles.nameText}>{user?.displayName || "Ahmad"}</Text>
+          {/* DYNAMIC NAME FROM FIRESTORE */}
+          <Text style={styles.nameText}>{userData?.name || "User"}</Text>
           <Text style={styles.emailText}>{user?.email}</Text>
         </View>
       </TouchableOpacity>
@@ -140,7 +160,7 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#fff', borderBottomRightRadius: 30, borderBottomLeftRadius: 30, elevation: 3 },
   avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#3498db', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
   avatarText: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
-  nameText: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
+  nameText: { fontSize: 22, fontWeight: 'bold', color: '#1e293b' },
   emailText: { fontSize: 13, color: '#94a3b8' },
   content: { flex: 1, padding: 20 },
   sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: '#1e293b' },

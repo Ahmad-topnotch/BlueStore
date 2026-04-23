@@ -6,7 +6,6 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { CartProvider } from '../context/CartContext';
 import { View, ActivityIndicator } from 'react-native';
 
-// Keep splash visible until we decide where to go
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -15,7 +14,6 @@ export default function RootLayout() {
   const router = useRouter();
   const segments = useSegments();
 
-  // Handle user state changes
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
@@ -24,29 +22,25 @@ export default function RootLayout() {
     return unsubscribe;
   }, []);
 
-  // Handle redirection
   useEffect(() => {
     if (initializing) return;
 
     const inAuthGroup = segments[0] === 'auth';
 
+    // Hide splash screen immediately
+    SplashScreen.hideAsync().catch(() => {});
+
     if (!user && !inAuthGroup) {
-      // Not logged in -> Login
       router.replace('/auth/login');
     } else if (user && inAuthGroup) {
-      // Logged in -> Home
       router.replace('/(tabs)');
     }
-    
-    // Hide splash screen now that we are navigating
-    SplashScreen.hideAsync().catch(() => {});
   }, [user, initializing, segments]);
 
-  // While checking Firebase, show a clean loading state (avoids white screen)
   if (initializing) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#3498db' }}>
-        <ActivityIndicator size="large" color="#ffffff" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#3498db" />
       </View>
     );
   }
@@ -54,9 +48,11 @@ export default function RootLayout() {
   return (
     <CartProvider>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="auth" options={{ animation: 'fade' }} />
-        <Stack.Screen name="(tabs)" options={{ animation: 'fade' }} />
+        {/* These names match your actual folder structure from the logs */}
+        <Stack.Screen name="auth" /> 
+        <Stack.Screen name="(tabs)" />
         <Stack.Screen name="product/[id]" options={{ presentation: 'modal' }} />
+        {/* Do NOT add 'admin' or 'checkout' here yet; Expo Router finds them automatically */}
       </Stack>
     </CartProvider>
   );

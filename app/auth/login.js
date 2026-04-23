@@ -19,18 +19,13 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
-      // 1. Sign in via Firebase
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      
-      // 2. Note: We don't need router.replace here because 
-      // our _layout.js is listening and will redirect us automatically!
       console.log("User signed in successfully");
     } catch (error) {
       console.error(error);
       let message = "Login failed. Please check your credentials.";
       if (error.code === 'auth/user-not-found') message = "No user found with this email.";
       if (error.code === 'auth/wrong-password') message = "Incorrect password.";
-      
       Alert.alert("Login Error", message);
     } finally {
       setLoading(false);
@@ -76,7 +71,8 @@ export default function LoginScreen() {
           {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.loginText}>Login</Text>}
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push('/auth/register')}>
+        {/* FIXED PATH BELOW */}
+        <TouchableOpacity onPress={() => router.push('/auth/signup')}>
           <Text style={styles.footerText}>Don't have an account? <Text style={styles.link}>Sign Up</Text></Text>
         </TouchableOpacity>
       </View>
