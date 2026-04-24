@@ -7,6 +7,7 @@ import { db } from '../../config/firebase';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar'; // Required to control battery/clock visibility
 
 const { width } = Dimensions.get('window');
 const CATEGORIES = ['All', 'Electronics', 'Fashion', 'Health', 'Home', 'Gadgets', 'Groceries'];
@@ -22,6 +23,7 @@ export default function HomeScreen() {
   const stepCarousel = useRef(null);
   const router = useRouter();
 
+  // Search logic remains in its own function as you had it
   const handleSearch = (text) => {
     setSearchQuery(text);
     if (text.trim() === '') {
@@ -67,6 +69,9 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* FIX: This makes the battery and clock icons (dark) visible on light background */}
+      <StatusBar style="dark" />
+
       {/* --- BRANDING SECTION --- */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
@@ -168,12 +173,19 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f7ff' },
-  header: { paddingTop: 50, paddingBottom: 15, paddingHorizontal: 15, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
+  // FIX: Background changed to theme color, border removed to blend perfectly
+  header: { 
+    paddingTop: 60, // Increased to avoid overlapping with battery/clock
+    paddingBottom: 15, 
+    paddingHorizontal: 15, 
+    backgroundColor: '#f0f7ff', 
+    borderBottomWidth: 0 
+  },
   brandRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
   brandName: { fontSize: 28, fontWeight: '900', color: '#3498db', letterSpacing: -1 },
   brandTagline: { fontSize: 11, color: '#94a3b8', marginTop: -4, fontWeight: '600' },
-  notifBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#f0f7ff', justifyContent: 'center', alignItems: 'center' },
-  searchBar: { flexDirection: 'row', backgroundColor: '#f1f5f9', borderRadius: 12, paddingHorizontal: 15, height: 48, alignItems: 'center' },
+  notifBtn: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  searchBar: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, paddingHorizontal: 15, height: 48, alignItems: 'center' },
   searchInput: { flex: 1, marginLeft: 10, fontSize: 16, color: '#2c3e50' },
   bannerContainer: { height: 180, marginTop: 15 },
   bannerImage: { width: width - 30, height: 180, marginHorizontal: 15, borderRadius: 15, resizeMode: 'cover' },

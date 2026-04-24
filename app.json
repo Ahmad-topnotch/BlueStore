@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "DarazClone",
-    "slug": "DarazClone",
+    "name": "BlueStore",
+    "slug": "BlueStore",
     "version": "1.0.0",
-    "scheme": "daraz-clone",
+    "scheme": "bluestore",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png", 
+      "image": "./assets/icon.png", 
       "resizeMode": "contain",
-      "backgroundColor": "#3498db" 
+      "backgroundColor": "#f0f7ff" 
     },
     "ios": {
       "supportsTablet": true
@@ -19,12 +19,13 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#3498db"
+        "backgroundColor": "#f0f7ff"
       },
+      "package": "com.muhammadahmad.bluestore",
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router",
