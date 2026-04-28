@@ -1,19 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { db } from '../../config/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { useCart } from '../../context/CartContext'; // Switch to Context
 
 export default function TabLayout() {
-  const [cartCount, setCartCount] = useState(0);
+  // Use the context instead of the useEffect/Firebase listener
+  const { cartItems } = useCart();
 
-  // Live listener for the red badge count
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "cart"), (snap) => {
-      setCartCount(snap.docs.length);
-    });
-    return unsub;
-  }, []);
+  // Calculate the total number of items
+  const cartCount = cartItems.reduce((sum, item) => sum + (item.quantity || 1), 0);
 
   return (
     <Tabs screenOptions={{
@@ -33,7 +28,9 @@ export default function TabLayout() {
         name="cart"
         options={{
           title: 'Cart',
-          tabBarBadge: cartCount > 0 ? cartCount : null, // The red badge logic
+          // Now updates instantly when you click "Add to Cart"
+          tabBarBadge: cartCount > 0 ? cartCount : null,
+          tabBarBadgeStyle: { backgroundColor: '#e74c3c' },
           tabBarIcon: ({ color }) => <Ionicons name="cart" size={24} color={color} />,
         }}
       />

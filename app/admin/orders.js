@@ -4,7 +4,8 @@ import {
   TouchableOpacity, ActivityIndicator, Alert 
 } from 'react-native';
 import { db } from '../../config/firebase';
-import { collection, onSnapshot, query, orderBy, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+// Changed deleteDoc to updateDoc and where for the logic update
+import { collection, onSnapshot, query, orderBy, doc, updateDoc, where } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
 
 export default function AdminOrders() {
@@ -12,9 +13,18 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+    // LOGIC CHANGE: Filter out orders hidden by Admin
+    const q = query(
+      collection(db, "orders"), 
+      where("hiddenByAdmin", "!=", true),
+      orderBy("createdAt", "desc")
+    );
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setOrders(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (error) => {
+      console.error("Query Error: ", error);
       setLoading(false);
     });
     return unsubscribe;
@@ -29,18 +39,30 @@ export default function AdminOrders() {
     }
   };
 
+  // --- UPDATED DELETION LOGIC (DECOUPLED) ---
   const confirmDelete = (orderId) => {
-    Alert.alert("Delete Order", "Permanently remove this record?", [
+    Alert.alert("Hide Order", "Remove this from Admin Panel? (User will still see it in history)", [
       { text: "Cancel", style: "cancel" },
-      { text: "Delete", style: "destructive", onPress: async () => await deleteDoc(doc(db, "orders", orderId)) }
+      { 
+        text: "Remove", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            // Update flag instead of deleting the whole document
+            await updateDoc(doc(db, "orders", orderId), { 
+              hiddenByAdmin: true 
+            });
+          } catch (e) {
+            Alert.alert("Error", "Failed to remove record");
+          }
+        } 
+      }
     ]);
   };
 
   const renderOrderItem = ({ item }) => {
     const firstImg = item.items && item.items.length > 0 ? item.items[0].image : null;
     
-    // --- SMART PRICE CALCULATION ---
-    // Checks totalPrice, then total, then sums up item prices if others are missing
     const displayPrice = item.totalPrice || item.total || 
       item.items?.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
@@ -61,7 +83,6 @@ export default function AdminOrders() {
             <Text style={styles.subText}>{item.customer?.phone}</Text>
             <Text style={styles.subText} numberOfLines={1}>{item.customer?.address}</Text>
             
-            {/* Displaying the Fixed Price Line */}
             <Text style={styles.priceTxt}>Amount: Rs. {displayPrice}</Text>
           </View>
         </View>
@@ -106,6 +127,7 @@ export default function AdminOrders() {
           keyExtractor={item => item.id}
           renderItem={renderOrderItem}
           contentContainerStyle={{ padding: 15 }}
+          ListEmptyComponent={<Text style={{textAlign: 'center', marginTop: 50, color: '#94a3b8'}}>No active orders.</Text>}
         />
       )}
     </View>

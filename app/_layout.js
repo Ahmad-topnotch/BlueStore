@@ -1,59 +1,75 @@
 import { useEffect, useState } from 'react';
+import { View, StyleSheet } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { auth } from '../config/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import { CartProvider } from '../context/CartContext';
-import { View, ActivityIndicator } from 'react-native';
 
+// Keep the system splash locked until we are ready to swap
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
-  const [initializing, setInitializing] = useState(true);
+  const [appIsReady, setAppIsReady] = useState(false);
   const [user, setUser] = useState(null);
   const router = useRouter();
   const segments = useSegments();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setUser(user);
-      if (initializing) setInitializing(false);
+    // 1. HIDE THE SYSTEM SPLASH IMMEDIATELY
+    const hideStaticSplash = async () => {
+      await SplashScreen.hideAsync();
+    };
+    hideStaticSplash();
+
+    // 2. Auth Listener
+    const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
+      setUser(authenticatedUser);
     });
-    return unsubscribe;
+
+    // 3. ADJUSTED DURATION
+    // Changed from 5000 to 3000 to prevent a second loop.
+    // If it still loops once, try reducing this to 2500.
+    const timer = setTimeout(() => {
+      setAppIsReady(true);
+    }, 3000); 
+
+    return () => {
+      unsubscribe();
+      clearTimeout(timer);
+    };
   }, []);
 
+  // 4. Handle Navigation after animation is done
   useEffect(() => {
-    if (initializing) return;
-
-    const inAuthGroup = segments[0] === 'auth';
-
-    // Hide splash screen immediately
-    SplashScreen.hideAsync().catch(() => {});
-
-    if (!user && !inAuthGroup) {
-      router.replace('/auth/login');
-    } else if (user && inAuthGroup) {
-      router.replace('/(tabs)');
+    if (appIsReady) {
+      const inAuthGroup = segments[0] === 'auth';
+      
+      if (!user && !inAuthGroup) {
+        router.replace('/auth/login');
+      } else if (user && (inAuthGroup || segments.length === 0 || segments[0] === 'index')) {
+        router.replace('/(tabs)');
+      }
     }
-  }, [user, initializing, segments]);
-
-  if (initializing) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#3498db" />
-      </View>
-    );
-  }
+  }, [appIsReady, user, segments]);
 
   return (
     <CartProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        {/* These names match your actual folder structure from the logs */}
-        <Stack.Screen name="auth" /> 
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="product/[id]" options={{ presentation: 'modal' }} />
-        {/* Do NOT add 'admin' or 'checkout' here yet; Expo Router finds them automatically */}
-      </Stack>
+      <View style={styles.container}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="index" /> 
+          <Stack.Screen name="auth" /> 
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="product/[id]" options={{ presentation: 'card' }} />
+        </Stack>
+      </View>
     </CartProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { 
+    flex: 1, 
+    backgroundColor: '#fff' 
+  },
+});

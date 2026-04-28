@@ -4,32 +4,50 @@ import { useRouter } from 'expo-router';
 import { db, auth } from '../../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import { useCart } from '../../context/CartContext';
 
 export default function CheckoutInfo() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('COD'); // Default to COD
+  const [paymentMethod, setPaymentMethod] = useState('COD'); 
+  const { totalPrice } = useCart(); 
   const router = useRouter();
 
   useEffect(() => {
-    const loadSavedDetails = async () => {
+    const loadUserDetails = async () => {
       const user = auth.currentUser;
       if (user) {
+        // 1. Set name from Firebase Auth profile as a priority
+        if (user.displayName) {
+          setName(user.displayName);
+        }
+
         try {
+          // 2. Check Firestore for saved profile/address data
           const userDoc = await getDoc(doc(db, "users", user.uid));
-          if (userDoc.exists() && userDoc.data().savedAddress) {
-            const saved = userDoc.data().savedAddress;
-            setName(saved.name || '');
-            setPhone(saved.phone || '');
-            setAddress(saved.address || '');
+          if (userDoc.exists()) {
+            const data = userDoc.data();
+            
+            // If Firestore has a name and Auth profile didn't, use Firestore
+            if (data.name && !name) {
+              setName(data.name);
+            }
+            
+            // Populate address and phone if saved previously
+            if (data.savedAddress) {
+              const saved = data.savedAddress;
+              if (!name && saved.name) setName(saved.name);
+              setPhone(saved.phone || '');
+              setAddress(saved.address || '');
+            }
           }
         } catch (error) {
-          console.log("Error fetching saved details:", error);
+          console.log("Error fetching profile details:", error);
         }
       }
     };
-    loadSavedDetails();
+    loadUserDetails();
   }, []);
 
   const handleNext = () => {
@@ -37,9 +55,17 @@ export default function CheckoutInfo() {
       Alert.alert("Missing Info", "Please fill in all fields to continue.");
       return;
     }
+
     router.push({
       pathname: '/checkout/payment',
-      params: { name, phone, address, paymentMethod } // Pass payment method too
+      params: { 
+        name, 
+        phone, 
+        address, 
+        paymentMethod,
+        subtotal: totalPrice.toFixed(2),
+        total: (totalPrice + 200).toFixed(2) 
+      }
     });
   };
 
@@ -50,16 +76,32 @@ export default function CheckoutInfo() {
 
       <View style={styles.section}>
         <Text style={styles.label}>Full Name</Text>
-        <TextInput style={styles.input} placeholder="Full Name" value={name} onChangeText={setName} />
+        <TextInput 
+          style={styles.input} 
+          placeholder="Your actual name" 
+          value={name} 
+          onChangeText={setName} 
+        />
 
         <Text style={styles.label}>Phone Number</Text>
-        <TextInput style={styles.input} placeholder="03xx xxxxxxx" keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
+        <TextInput 
+          style={styles.input} 
+          placeholder="03xx xxxxxxx" 
+          keyboardType="phone-pad" 
+          value={phone} 
+          onChangeText={setPhone} 
+        />
 
         <Text style={styles.label}>Delivery Address</Text>
-        <TextInput style={[styles.input, styles.textArea]} placeholder="Complete Address" multiline value={address} onChangeText={setAddress} />
+        <TextInput 
+          style={[styles.input, styles.textArea]} 
+          placeholder="Complete Address" 
+          multiline 
+          value={address} 
+          onChangeText={setAddress} 
+        />
       </View>
 
-      {/* --- PAYMENT METHOD SELECTION --- */}
       <Text style={styles.label}>Payment Method</Text>
       <TouchableOpacity 
         style={[styles.paymentOption, paymentMethod === 'COD' && styles.activeOption]} 
@@ -70,16 +112,8 @@ export default function CheckoutInfo() {
         {paymentMethod === 'COD' && <Ionicons name="checkmark-circle" size={20} color="#3498db" />}
       </TouchableOpacity>
 
-      <TouchableOpacity 
-        style={[styles.paymentOption, styles.disabledOption]} 
-        disabled={true}
-      >
-        <Ionicons name="card-outline" size={24} color="#cbd5e1" />
-        <Text style={styles.disabledText}>Credit / Debit Card (Coming Soon)</Text>
-      </TouchableOpacity>
-
       <TouchableOpacity style={styles.btn} onPress={handleNext}>
-        <Text style={styles.btnText}>Review Order</Text>
+        <Text style={styles.btnText}>Review Order (Rs. {(totalPrice + 200).toLocaleString()})</Text>
       </TouchableOpacity>
       <View style={{ height: 40 }} />
     </ScrollView>
@@ -100,8 +134,6 @@ const styles = StyleSheet.create({
   activeOption: { borderColor: '#3498db', backgroundColor: '#f0f9ff' },
   paymentText: { flex: 1, fontSize: 15, color: '#475569', fontWeight: '500' },
   activePaymentText: { color: '#3498db', fontWeight: 'bold' },
-  disabledOption: { backgroundColor: '#f1f5f9', borderColor: '#f1f5f9' },
-  disabledText: { flex: 1, fontSize: 15, color: '#cbd5e1' },
-  btn: { backgroundColor: '#3498db', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 20 },
+  btn: { backgroundColor: '#3498db', padding: 18, borderRadius: 15, alignItems: 'center', marginTop: 10 },
   btnText: { color: '#fff', fontWeight: 'bold', fontSize: 16 }
 });

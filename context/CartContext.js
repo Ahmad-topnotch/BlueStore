@@ -8,17 +8,25 @@ const CartContext = createContext();
 export const CartProvider = ({ children }) => {
   const [cartItems, setCartItems] = useState([]);
 
-  const addToCart = (product) => {
+  // UPDATED: Now accepts quantity parameter to allow adding multiple at once
+  const addToCart = (product, quantity = 1) => {
     setCartItems((prev) => {
       const exists = prev.find(item => item.id === product.id);
       if (exists) {
-        return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+        return prev.map(item => 
+          item.id === product.id 
+            ? { ...item, quantity: item.quantity + quantity } 
+            : item
+        );
       }
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...product, quantity: quantity }];
     });
   };
 
   const removeFromCart = (id) => setCartItems(prev => prev.filter(item => item.id !== id));
+
+  // NEW: Added clearCart function to empty the cart after successful order
+  const clearCart = () => setCartItems([]);
 
   // UPDATED: Now accepts shippingData from the Checkout Screen
   const processOrder = async (shippingData) => {
@@ -41,7 +49,7 @@ export const CartProvider = ({ children }) => {
       };
 
       await addDoc(collection(db, "orders"), orderData);
-      setCartItems([]);
+      clearCart(); // Using the new clearCart function here
       Alert.alert("Success", "Your order has been placed!");
       return true;
     } catch (e) {
@@ -54,7 +62,6 @@ export const CartProvider = ({ children }) => {
   const cartCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
   
   const totalPrice = cartItems.reduce((sum, item) => {
-    // Handling potential string prices with commas
     const originalPrice = typeof item.price === 'string' 
       ? parseFloat(item.price.replace(/,/g, '')) 
       : item.price;
@@ -65,7 +72,8 @@ export const CartProvider = ({ children }) => {
   }, 0);
 
   return (
-    <CartContext.Provider value={{ cartItems, addToCart, removeFromCart, cartCount, totalPrice, processOrder }}>
+    // UPDATED: Included clearCart in the Provider value so other files can use it
+    <CartContext.Provider value={{ cartItems, addToCart, removeFromCart, cartCount, totalPrice, processOrder, clearCart }}>
       {children}
     </CartContext.Provider>
   );

@@ -9,12 +9,13 @@
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/icon.png", 
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#f0f7ff" 
+      "backgroundColor": "#f0f7ff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.muhammadahmad.bluestore"
     },
     "android": {
       "adaptiveIcon": {
@@ -22,17 +23,33 @@
         "backgroundColor": "#f0f7ff"
       },
       "package": "com.muhammadahmad.bluestore",
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "INTERNET"
+      ]
     },
     "web": {
       "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-splash-screen"
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#f0f7ff",
+          "image": "./assets/icon.png",
+          "imageWidth": 200
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "933ffa5c-ab85-4308-98be-160629485f98"
+      }
     }
   }
 }

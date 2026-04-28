@@ -1,182 +1,218 @@
 import React, { useEffect, useState } from 'react';
-import { 
-  View, Text, StyleSheet, TouchableOpacity, Alert, Modal,
-  SafeAreaView, FlatList, ActivityIndicator, TextInput, Vibration, Image 
-} from 'react-native';
-import { auth, db } from '../../config/firebase';
-import { signOut } from 'firebase/auth';
-import { collection, query, where, onSnapshot, doc, getDoc, deleteDoc } from 'firebase/firestore';
-import { useRouter } from 'expo-router';
+import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, TouchableOpacity, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; 
+import { db, auth } from '../../config/firebase'; 
+import { collection, query, where, getDocs, orderBy, doc, getDoc, updateDoc } from 'firebase/firestore';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { signOut } from 'firebase/auth'; 
 
 export default function AccountScreen() {
-  const user = auth.currentUser;
-  const router = useRouter();
-  
   const [orders, setOrders] = useState([]);
-  const [userData, setUserData] = useState(null); // New state for Firestore user data
   const [loading, setLoading] = useState(true);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [adminPass, setAdminPass] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [userData, setUserData] = useState({ name: '', email: '' });
+  const router = useRouter();
 
-  useEffect(() => {
+  // --- FIXED LOGOUT LOGIC ---
+  const handleLogout = () => {
+    Alert.alert("Logout", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { 
+        text: "Logout", 
+        style: "destructive", 
+        onPress: async () => {
+          try {
+            await signOut(auth);
+            // Matches your folder: app/auth/login.js
+            router.replace('/auth/login'); 
+          } catch (error) {
+            Alert.alert("Error", "Failed to sign out.");
+          }
+        } 
+      }
+    ]);
+  };
+
+  const fetchData = async (refresh = false) => {
+    const user = auth.currentUser;
     if (!user) {
       setLoading(false);
+      setIsRefreshing(false);
       return;
     }
 
-    // 1. Fetch User Name from Firestore
-    const fetchUserData = async () => {
-      try {
-        const userDoc = await getDoc(doc(db, "users", user.uid));
-        if (userDoc.exists()) {
-          setUserData(userDoc.data());
-        }
-      } catch (err) {
-        console.error("Error fetching user data:", err);
+    if (refresh) setIsRefreshing(true);
+    else setLoading(true);
+
+    try {
+      const userDoc = await getDoc(doc(db, "users", user.uid));
+      let displayName = user.displayName || "Guest User";
+      
+      if (userDoc.exists()) {
+        const data = userDoc.data();
+        displayName = data.name || data.savedAddress?.name || displayName;
       }
-    };
+      
+      setUserData({ name: displayName, email: user.email });
 
-    // 2. Fetch Orders Real-time
-    const q = query(collection(db, "orders"), where("userId", "==", user.uid));
-    const unsubscribeOrders = onSnapshot(q, (snapshot) => {
-      setOrders(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      // INDEX FIX: Use a simple query to avoid the "Index Required" error
+      const q = query(
+        collection(db, "orders"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+      
+      const querySnapshot = await getDocs(q);
+      
+      // JS FILTER: Filter out hidden orders locally
+      const fetchedOrders = querySnapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() }))
+        .filter(order => order.hiddenByUser !== true);
+
+      setOrders(fetchedOrders);
+    } catch (error) {
+      console.error("Error fetching account data: ", error);
+    } finally {
       setLoading(false);
-    }, (err) => {
-      console.error(err);
-      setLoading(false);
-    });
-
-    fetchUserData();
-    return () => unsubscribeOrders();
-  }, [user]);
-
-  const handleAdminAuth = () => {
-    if (adminPass === "admin123") {
-      setModalVisible(false);
-      setAdminPass('');
-      router.push('/admin/dashboard'); 
-    } else {
-      Alert.alert("Access Denied", "Incorrect Password");
-      setAdminPass('');
+      setIsRefreshing(false);
     }
   };
 
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAdminAccess = () => {
+    router.push('/admin/login'); 
+  };
+
   const deleteOrder = (orderId) => {
-    Alert.alert("Cancel Order", "Delete this order?", [
-      { text: "No", style: "cancel" },
-      { text: "Yes", style: "destructive", onPress: async () => await deleteDoc(doc(db, "orders", orderId)) }
-    ]);
+    Alert.alert(
+      "Cancel Order",
+      "Remove from history? (This will notify the store to cancel delivery)",
+      [
+        { text: "Cancel", style: "cancel" },
+        { 
+          text: "Remove", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              // Hides order from user and updates status for Admin
+              await updateDoc(doc(db, "orders", orderId), {
+                hiddenByUser: true,
+                status: "Cancelled by User" 
+              });
+              
+              setOrders(prevOrders => prevOrders.filter(order => order.id !== orderId));
+            } catch (error) {
+              Alert.alert("Error", "Could not remove order.");
+            }
+          } 
+        }
+      ]
+    );
   };
 
   const renderOrderItem = ({ item }) => (
     <View style={styles.orderCard}>
-      <Image 
-        source={{ uri: item.items?.[0]?.image || 'https://via.placeholder.com/150' }} 
-        style={styles.orderImage} 
-      />
-      <View style={{ flex: 1, marginLeft: 15 }}>
-        <Text style={styles.orderId}>Order #{item.id.slice(-6).toUpperCase()}</Text>
-        <Text style={[styles.orderStatus, { color: item.status === 'Delivered' ? '#2ecc71' : '#f39c12' }]}>
-          ● {item.status || 'Pending'}
-        </Text>
-        <Text style={styles.orderTotal}>Rs. {item.totalAmount || item.total}</Text>
+      <View style={styles.orderHeader}>
+        <View>
+          <Text style={styles.orderId}>Order #{item.id.slice(-6).toUpperCase()}</Text>
+          <Text style={styles.orderDate}>{item.date || "Recently"}</Text>
+        </View>
+        <View style={styles.headerRight}>
+          <Text style={[styles.orderStatus, item.status === "Cancelled by User" && {color: '#e74c3c', backgroundColor: '#fff5f5'}]}>
+            {item.status || "Pending"}
+          </Text>
+          <TouchableOpacity onPress={() => deleteOrder(item.id)} style={styles.deleteBtn}>
+            <Ionicons name="trash-outline" size={20} color="#e74c3c" />
+          </TouchableOpacity>
+        </View>
       </View>
-      <TouchableOpacity onPress={() => deleteOrder(item.id)}>
-        <Ionicons name="trash-outline" size={22} color="#e74c3c" />
-      </TouchableOpacity>
+      <View style={styles.divider} />
+      {item.items && item.items.map((prod, index) => (
+        <View key={index} style={styles.productRow}>
+          <Image source={{ uri: prod.image }} style={styles.productImage} />
+          <View style={styles.productInfo}>
+            <Text style={styles.productName} numberOfLines={1}>{prod.title || prod.name}</Text>
+            <View style={styles.qtyPriceRow}>
+              <View style={styles.qtyBadge}><Text style={styles.qtyText}>x{prod.quantity || 1}</Text></View>
+              <Text style={styles.productPrice}>Rs. {prod.price * (prod.quantity || 1)}</Text>
+            </View>
+          </View>
+        </View>
+      ))}
+      <View style={styles.footerRow}>
+        <Text style={styles.totalLabel}>Total Amount:</Text>
+        <Text style={styles.totalAmount}>Rs. {item.totalAmount || item.total}</Text>
+      </View>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <TouchableOpacity 
-        onLongPress={() => { Vibration.vibrate(100); setModalVisible(true); }} 
-        delayLongPress={3000} 
-        activeOpacity={1}
-      >
-        <View style={styles.header}>
-          <View style={styles.avatar}>
-            {/* Display first letter of name or email */}
-            <Text style={styles.avatarText}>
-              {(userData?.name || user?.email)?.charAt(0).toUpperCase()}
-            </Text>
-          </View>
-          {/* DYNAMIC NAME FROM FIRESTORE */}
-          <Text style={styles.nameText}>{userData?.name || "User"}</Text>
-          <Text style={styles.emailText}>{user?.email}</Text>
-        </View>
-      </TouchableOpacity>
-
-      <View style={styles.content}>
-        <Text style={styles.sectionTitle}>My Orders</Text>
-        {loading ? (
-          <ActivityIndicator size="large" color="#3498db" />
-        ) : (
-          <FlatList 
-            data={orders} 
-            keyExtractor={item => item.id} 
-            renderItem={renderOrderItem} 
-            ListEmptyComponent={<Text style={styles.emptyTxt}>No orders yet.</Text>}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
-        <TouchableOpacity style={styles.logoutBtn} onPress={() => signOut(auth)}>
-          <Ionicons name="log-out-outline" size={20} color="#e74c3c" />
-          <Text style={styles.logoutText}>Log Out</Text>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      <View style={styles.profileHeader}>
+        {/* Logout Button properly routed to /auth/login */}
+        <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+          <Ionicons name="log-out-outline" size={24} color="#e74c3c" />
         </TouchableOpacity>
+
+        <TouchableOpacity 
+          onLongPress={handleAdminAccess} 
+          delayLongPress={8000} 
+          activeOpacity={0.7}
+        >
+          <Ionicons name="person-circle-outline" size={80} color="#3498db" />
+        </TouchableOpacity>
+        <Text style={styles.userName}>{userData.name}</Text>
+        <Text style={styles.userEmail}>{userData.email}</Text>
       </View>
 
-      <Modal visible={modalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Ionicons name="shield-checkmark" size={40} color="#3498db" style={{marginBottom: 10}}/>
-            <Text style={styles.modalTitle}>Admin Access</Text>
-            <TextInput 
-              style={styles.modalInput} 
-              placeholder="Password" 
-              secureTextEntry 
-              value={adminPass} 
-              onChangeText={setAdminPass} 
-              autoFocus 
-            />
-            <View style={styles.modalButtons}>
-              <TouchableOpacity onPress={() => setModalVisible(false)} style={styles.cancelBtn}>
-                <Text style={{color: '#64748b'}}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={handleAdminAuth} style={styles.confirmBtn}>
-                <Text style={{color: '#fff', fontWeight: 'bold'}}>Login</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <Text style={styles.sectionTitle}>My Orders</Text>
+      
+      {loading ? (
+        <ActivityIndicator size="large" color="#3498db" style={{marginTop: 50}} />
+      ) : (
+        <FlatList
+          data={orders}
+          keyExtractor={(item) => item.id}
+          renderItem={renderOrderItem}
+          contentContainerStyle={{ padding: 20 }}
+          ListEmptyComponent={<Text style={styles.emptyText}>No order history found.</Text>}
+          onRefresh={() => fetchData(true)}
+          refreshing={isRefreshing}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#fff', borderBottomRightRadius: 30, borderBottomLeftRadius: 30, elevation: 3 },
-  avatar: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#3498db', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  avatarText: { color: '#fff', fontSize: 28, fontWeight: 'bold' },
-  nameText: { fontSize: 22, fontWeight: 'bold', color: '#1e293b' },
-  emailText: { fontSize: 13, color: '#94a3b8' },
-  content: { flex: 1, padding: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: 'bold', marginBottom: 15, color: '#1e293b' },
-  orderCard: { backgroundColor: '#fff', padding: 15, borderRadius: 15, marginBottom: 12, flexDirection: 'row', alignItems: 'center', elevation: 1 },
-  orderImage: { width: 55, height: 55, borderRadius: 10, backgroundColor: '#f1f5f9' },
-  orderId: { fontWeight: 'bold', fontSize: 14, color: '#1e293b' },
-  orderStatus: { fontSize: 12, fontWeight: 'bold', marginTop: 2 },
-  orderTotal: { fontSize: 15, fontWeight: 'bold', color: '#2ecc71', marginTop: 2 },
-  logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  logoutText: { marginLeft: 10, color: '#e74c3c', fontWeight: 'bold', fontSize: 16 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', width: '85%', padding: 25, borderRadius: 25, alignItems: 'center' },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 20, color: '#1e293b' },
-  modalInput: { width: '100%', backgroundColor: '#f1f5f9', padding: 15, borderRadius: 12, marginBottom: 20, textAlign: 'center', fontSize: 16 },
-  modalButtons: { flexDirection: 'row', gap: 10, width: '100%' },
-  cancelBtn: { flex: 1, alignItems: 'center', padding: 12 },
-  confirmBtn: { flex: 1, backgroundColor: '#3498db', alignItems: 'center', padding: 12, borderRadius: 12 },
-  emptyTxt: { textAlign: 'center', color: '#94a3b8', marginTop: 40 }
+  profileHeader: { alignItems: 'center', padding: 30, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#f1f5f9', position: 'relative' },
+  logoutBtn: { position: 'absolute', right: 20, top: 20, padding: 10 },
+  userName: { fontSize: 22, fontWeight: 'bold', color: '#1e293b', marginTop: 10 },
+  userEmail: { color: '#64748b', fontSize: 14 },
+  sectionTitle: { fontSize: 18, fontWeight: 'bold', marginLeft: 20, marginTop: 20, color: '#1e293b' },
+  orderCard: { backgroundColor: '#fff', borderRadius: 20, padding: 15, marginBottom: 15, elevation: 3 },
+  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  orderId: { fontWeight: 'bold', color: '#1e293b', fontSize: 14 },
+  orderDate: { color: '#94a3b8', fontSize: 12 },
+  orderStatus: { color: '#3498db', fontWeight: 'bold', fontSize: 12, backgroundColor: '#f0f9ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+  deleteBtn: { padding: 5 },
+  divider: { height: 1, backgroundColor: '#f1f5f9', marginVertical: 12 },
+  productRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  productImage: { width: 60, height: 60, borderRadius: 12, backgroundColor: '#f1f5f9' },
+  productInfo: { flex: 1, marginLeft: 15 },
+  productName: { fontSize: 15, fontWeight: '600', color: '#334155' },
+  qtyPriceRow: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 10 },
+  qtyBadge: { backgroundColor: '#f1f5f9', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 },
+  qtyText: { fontSize: 11, fontWeight: 'bold', color: '#64748b' },
+  productPrice: { fontSize: 14, fontWeight: 'bold', color: '#1e293b' },
+  footerRow: { borderTopWidth: 1, borderTopColor: '#f1f5f9', marginTop: 5, paddingTop: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalLabel: { color: '#64748b', fontSize: 14 },
+  totalAmount: { color: '#2ecc71', fontWeight: 'bold', fontSize: 18 },
+  emptyText: { textAlign: 'center', marginTop: 50, color: '#94a3b8' }
 });
