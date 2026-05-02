@@ -40,6 +40,13 @@
           "image": "./assets/icon.png",
           "imageWidth": 200
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.com.muhammadahmad.bluestore",
+          "enableGooglePay": true
+        }
       ]
     ],
     "experiments": {

@@ -5,8 +5,9 @@ import * as SplashScreen from 'expo-splash-screen';
 import { auth } from '../config/firebase'; 
 import { onAuthStateChanged } from 'firebase/auth';
 import { CartProvider } from '../context/CartContext';
+// 1. Import StripeProvider
+import { StripeProvider } from '@stripe/stripe-react-native';
 
-// Keep the system splash locked until we are ready to swap
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function RootLayout() {
@@ -16,20 +17,15 @@ export default function RootLayout() {
   const segments = useSegments();
 
   useEffect(() => {
-    // 1. HIDE THE SYSTEM SPLASH IMMEDIATELY
     const hideStaticSplash = async () => {
       await SplashScreen.hideAsync();
     };
     hideStaticSplash();
 
-    // 2. Auth Listener
     const unsubscribe = onAuthStateChanged(auth, (authenticatedUser) => {
       setUser(authenticatedUser);
     });
 
-    // 3. ADJUSTED DURATION
-    // Changed from 5000 to 3000 to prevent a second loop.
-    // If it still loops once, try reducing this to 2500.
     const timer = setTimeout(() => {
       setAppIsReady(true);
     }, 3000); 
@@ -40,7 +36,6 @@ export default function RootLayout() {
     };
   }, []);
 
-  // 4. Handle Navigation after animation is done
   useEffect(() => {
     if (appIsReady) {
       const inAuthGroup = segments[0] === 'auth';
@@ -54,16 +49,22 @@ export default function RootLayout() {
   }, [appIsReady, user, segments]);
 
   return (
-    <CartProvider>
-      <View style={styles.container}>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="index" /> 
-          <Stack.Screen name="auth" /> 
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="product/[id]" options={{ presentation: 'card' }} />
-        </Stack>
-      </View>
-    </CartProvider>
+    // 2. StripeProvider initialized with your provided test key
+    <StripeProvider
+      publishableKey="pk_test_51TS944Pmx7v25GtiFZxBNh3cfWtd6rGsmnDPYWHDhkDNz9g3xTBSYSHVOF7i9OTksQD8Vq5GeYgApD3lZIwsC3pm00ZMrztm8W"
+      merchantIdentifier="merchant.com.bluestore" 
+    >
+      <CartProvider>
+        <View style={styles.container}>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" /> 
+            <Stack.Screen name="auth" /> 
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="product/[id]" options={{ presentation: 'card' }} />
+          </Stack>
+        </View>
+      </CartProvider>
+    </StripeProvider>
   );
 }
 
