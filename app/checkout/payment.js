@@ -1,15 +1,14 @@
-
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, View, ActivityIndicator, Alert, Text, TouchableOpacity, SafeAreaView } from 'react-native';
 import { useStripe } from '@stripe/stripe-react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { db, auth } from '../../config/firebase'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { useCart } from '../../context/CartContext'; // Import Cart Context
+import { useCart } from '../../context/CartContext'; 
 
 export default function PaymentScreen() {
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
-  const { clearCart } = useCart(); // Destructure clearCart function
+  const { clearCart } = useCart(); 
   const [loading, setLoading] = useState(true);
   const [paymentReady, setPaymentReady] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -29,13 +28,20 @@ export default function PaymentScreen() {
   const initializePaymentSheet = async () => {
     try {
       const amountInCents = Math.round(parseFloat(params.totalAmount || "0") * 100);
-      const localUrl = 'http://192.168.1.67/database-336c3/us-central1/createPaymentIntent';
+      
+      // FIXED URL: No spaces, correct port, and matching your local IP
+      const localUrl = 'http://192.168.1.67:5001/database-336c3/us-central1/createPaymentIntent';
       
       const response = await fetch(localUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: amountInCents, currency: 'pkr' }),
       });
+
+      if (!response.ok) {
+        throw new Error(`HTTP Error ${response.status}`);
+      }
+
       const { paymentIntent, customer, ephemeralKey } = await response.json();
 
       const { error } = await initPaymentSheet({
@@ -47,10 +53,18 @@ export default function PaymentScreen() {
         defaultBillingDetails: { name: params.name },
       });
 
-      if (!error) setPaymentReady(true);
+      if (!error) {
+        setPaymentReady(true);
+      } else {
+        Alert.alert("Stripe Error", error.message);
+      }
     } catch (e) {
-      Alert.alert("Error", "Payment system offline.");
-    } finally { setLoading(false); }
+      console.error("Initialization Error:", e);
+      // DEBUG ALERT: This will tell you if it's a network issue or server issue
+      Alert.alert("Connection Status", `Error: ${e.message}`);
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleOrderPlacement = async () => {
@@ -59,7 +73,7 @@ export default function PaymentScreen() {
     if (params.method === 'card') {
       const { error } = await presentPaymentSheet();
       if (error) {
-        Alert.alert(`Error`, error.message);
+        Alert.alert(`Payment Error`, error.message);
         setIsProcessing(false);
         return;
       }
@@ -67,11 +81,12 @@ export default function PaymentScreen() {
 
     const saved = await saveOrderToFirestore();
     if (saved) {
-      clearCart(); // <--- FIX 1: CLEAR CART AFTER SUCCESS
+      // SUCCESS: Clear the cart locally
+      clearCart(); 
       Alert.alert('Success', 'Order placed successfully!');
       router.replace('/(tabs)/account');
     } else {
-      Alert.alert('Error', 'Failed to record order.');
+      Alert.alert('Order Failed', 'The payment was successful but we could not save the order. Please contact support.');
       setIsProcessing(false);
     }
   };
@@ -117,7 +132,9 @@ export default function PaymentScreen() {
         {loading || isProcessing ? (
           <View style={styles.loaderContainer}>
             <ActivityIndicator size="large" color="#3498db" />
-            <Text style={styles.loaderSub}>{isProcessing ? "Finalizing Order..." : "Loading Payment..."}</Text>
+            <Text style={styles.loaderSub}>
+              {isProcessing ? "Recording Order..." : "Connecting to Stripe..."}
+            </Text>
           </View>
         ) : (
           <TouchableOpacity 
