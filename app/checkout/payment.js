@@ -29,7 +29,7 @@ export default function PaymentScreen() {
   const initializePaymentSheet = async () => {
     try {
       const amountInCents = Math.round(parseFloat(params.totalAmount || "0") * 100);
-      const localUrl = 'http://192.168.130.154:5001/database-336c3/us-central1/createPaymentIntent';
+      const localUrl = 'http://192.168.1.67/database-336c3/us-central1/createPaymentIntent';
       
       const response = await fetch(localUrl, {
         method: 'POST',
